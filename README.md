@@ -45,6 +45,7 @@ Each app directory contains:
 | `jellyfin` | VPN-only | Authentik OIDC | Media server |
 | `openproject` | VPN-only | — | Project management |
 | `plane` | Public | — | Project management (SSO is commercial) |
+| `snipeit` | VPN-only | — | IT asset management (SAML SSO requires LDAP outpost) |
 | `twenty` | Public | — | CRM (generic OIDC SSO is enterprise-only) |
 
 ## Adding an app to a deployment

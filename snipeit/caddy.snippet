@@ -1,0 +1,43 @@
+# Snipe-IT — Caddy Configuration Snippet
+# Include in main Caddyfile for deployment
+#
+# VPN-ONLY SERVICE:
+#   - DNS-01 certificate via Route 53 (no public HTTP needed)
+#   - IP filtering allows only ZeroTier clients (ZT_SUBNET)
+#   - Public DNS points to ZeroTier IP (unreachable from internet)
+#   - Proxies to snipeit:80
+
+{{ .Env.APP_SUBDOMAIN }}.{{ .Env.DOMAIN }} {
+	# DNS-01 TLS certificate via Route 53
+	tls {
+		dns route53 {
+			hosted_zone_id {$AWS_HOSTED_ZONE_ID}
+		}
+	}
+
+	# VPN-only access control
+	@vpn remote_ip {{ .Env.ZT_SUBNET }}
+	@blocked not remote_ip {{ .Env.ZT_SUBNET }}
+	respond @blocked "VPN access required" 403
+
+	# Proxy to Snipe-IT
+	reverse_proxy @vpn snipeit:80 {
+		header_up X-Forwarded-Proto https
+		header_up Host {host}
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	# Security headers
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	encode gzip
+
+	log {
+		output file /var/log/caddy/snipeit.log
+		format json
+	}
+}
