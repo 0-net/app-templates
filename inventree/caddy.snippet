@@ -1,0 +1,51 @@
+# InvenTree — Caddy Configuration Snippet
+# Include in main Caddyfile for deployment
+#
+# Variables required:
+#   ${DOMAIN}        - Base domain (e.g., v1.vertamob.com)
+#   ${APP_SUBDOMAIN} - Subdomain (default: inventory)
+#
+# VPN-ONLY SERVICE:
+#   - DNS-01 certificate via Route 53 (no public HTTP needed)
+#   - IP filtering allows only ZeroTier clients (ZT_SUBNET)
+#   - Public DNS points to ZeroTier IP (unreachable from internet)
+#   - Proxies to inventree-proxy:1337 (InvenTree's bundled Caddy)
+
+{{ .Env.APP_SUBDOMAIN }}.{{ .Env.DOMAIN }} {
+	# DNS-01 TLS certificate via Route 53
+	# No public HTTP access required — Caddy talks directly to AWS API
+	# hosted_zone_id uses {$VAR}: resolved by Caddy parser at startup.
+	tls {
+		dns route53 {
+			hosted_zone_id {$AWS_HOSTED_ZONE_ID}
+		}
+	}
+
+	# VPN-only access control
+	# Only allow ZeroTier VPN clients
+	@vpn remote_ip {{ .Env.ZT_SUBNET }}
+	@blocked not remote_ip {{ .Env.ZT_SUBNET }}
+	respond @blocked "VPN access required" 403
+
+	# Proxy to InvenTree's bundled Caddy (serves static files + proxies to gunicorn)
+	reverse_proxy @vpn inventree-proxy:1337 {
+		header_up X-Forwarded-Proto https
+		header_up Host {host}
+	}
+
+	# Security headers
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	# Compression
+	encode gzip
+
+	# Logging
+	log {
+		output file /var/log/caddy/inventree.log
+		format json
+	}
+}

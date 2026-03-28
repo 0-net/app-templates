@@ -1,0 +1,121 @@
+# Twenty — Open-source CRM
+# https://twenty.com / https://docs.twenty.com/developers/self-host
+#
+# Architecture:
+#   db     — PostgreSQL 16 (twenty-net only)
+#   redis  — Redis (twenty-net only)
+#   twenty-server — API + frontend, single container (twenty-net + sixnet)
+#   worker        — Background jobs (twenty-net only, shares server-local-data volume)
+#
+# Traffic flow:
+#   sixnet Caddy (TLS) → twenty-server:3000
+#
+# server and worker share the same image and the server-local-data volume
+# (file uploads, local storage). worker disables migrations and cron
+# registration — those run in the server container on startup.
+
+networks:
+  sixnet:
+    external: true
+    name: ${DOCKER_NETWORK_NAME:-sixnet}
+  twenty-net:
+
+volumes:
+  db-data:
+  server-local-data:
+
+services:
+
+  db:
+    image: postgres:16
+    container_name: twenty-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: twenty
+      POSTGRES_PASSWORD: ${TWENTY_DB_PASSWORD}
+      POSTGRES_DB: default
+    volumes:
+      - ${TWENTY_DB_DATA:-db-data}:/var/lib/postgresql/data
+    networks:
+      - twenty-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U twenty -d default"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: twenty-redis
+    restart: unless-stopped
+    command: ["--maxmemory-policy", "noeviction"]
+    networks:
+      - twenty-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  twenty-server:
+    image: twentycrm/twenty:latest
+    container_name: twenty-server
+    restart: unless-stopped
+    volumes:
+      - ${TWENTY_SERVER_DATA:-server-local-data}:/app/packages/twenty-server/.local-storage
+    environment:
+      SERVER_URL: "https://${APP_SUBDOMAIN:-crm}.${DOMAIN}"
+      APP_SECRET: ${TWENTY_APP_SECRET}
+      PG_DATABASE_URL: "postgres://twenty:${TWENTY_DB_PASSWORD}@db:5432/default"
+      REDIS_URL: "redis://redis:6379"
+      STORAGE_TYPE: local
+      # Auth
+      AUTH_PASSWORD_ENABLED: "${TWENTY_AUTH_PASSWORD_ENABLED:-true}"
+      # SMTP (optional — leave TWENTY_SMTP_HOST empty to disable)
+      EMAIL_DRIVER: "${TWENTY_EMAIL_DRIVER:-logger}"
+      EMAIL_FROM_ADDRESS: "${TWENTY_EMAIL_FROM:-}"
+      EMAIL_SMTP_HOST: "${TWENTY_SMTP_HOST:-}"
+      EMAIL_SMTP_PORT: "${TWENTY_SMTP_PORT:-587}"
+      EMAIL_SMTP_USER: "${TWENTY_SMTP_USER:-}"
+      EMAIL_SMTP_PASSWORD: "${TWENTY_SMTP_PASSWORD:-}"
+    networks:
+      - sixnet
+      - twenty-net
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  worker:
+    image: twentycrm/twenty:latest
+    container_name: twenty-worker
+    restart: unless-stopped
+    command: ["yarn", "worker:prod"]
+    volumes:
+      - ${TWENTY_SERVER_DATA:-server-local-data}:/app/packages/twenty-server/.local-storage
+    environment:
+      SERVER_URL: "https://${APP_SUBDOMAIN:-crm}.${DOMAIN}"
+      APP_SECRET: ${TWENTY_APP_SECRET}
+      PG_DATABASE_URL: "postgres://twenty:${TWENTY_DB_PASSWORD}@db:5432/default"
+      REDIS_URL: "redis://redis:6379"
+      STORAGE_TYPE: local
+      DISABLE_DB_MIGRATIONS: "true"
+      DISABLE_CRON_JOBS_REGISTRATION: "true"
+      # SMTP (optional — leave TWENTY_SMTP_HOST empty to disable)
+      EMAIL_DRIVER: "${TWENTY_EMAIL_DRIVER:-logger}"
+      EMAIL_FROM_ADDRESS: "${TWENTY_EMAIL_FROM:-}"
+      EMAIL_SMTP_HOST: "${TWENTY_SMTP_HOST:-}"
+      EMAIL_SMTP_PORT: "${TWENTY_SMTP_PORT:-587}"
+      EMAIL_SMTP_USER: "${TWENTY_SMTP_USER:-}"
+      EMAIL_SMTP_PASSWORD: "${TWENTY_SMTP_PASSWORD:-}"
+    networks:
+      - twenty-net
+    depends_on:
+      - twenty-server

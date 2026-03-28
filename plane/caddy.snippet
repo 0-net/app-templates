@@ -1,0 +1,22 @@
+# Plane — Caddy Configuration Snippet
+# Include in main Caddyfile for deployment
+#
+# PUBLIC SERVICE:
+#   - HTTP-01 TLS managed by outer Caddy (no DNS-01 needed)
+#   - No IP filtering — accessible from the internet
+#   - Proxies to plane-proxy:80 (Plane's internal Caddy router)
+
+{{ .Env.APP_SUBDOMAIN }}.{{ .Env.DOMAIN }} {
+	# Proxy to Plane's internal router (handles /api/*, /spaces/*, /god-mode/*, etc.)
+	reverse_proxy plane-proxy:80 {
+		header_up X-Forwarded-Proto https
+		header_up Host {host}
+	}
+
+	encode gzip
+
+	log {
+		output file /var/log/caddy/plane.log
+		format json
+	}
+}

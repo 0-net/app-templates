@@ -1,0 +1,179 @@
+# InvenTree — Inventory Management System
+# https://docs.inventree.org/
+#
+# Architecture:
+#   inventree-db      — PostgreSQL (dedicated, backend network only)
+#   inventree-cache   — Redis cache (backend only)
+#   inventree-server  — gunicorn web server (sixnet + backend)
+#   inventree-worker  — django-Q background tasks (sixnet + backend)
+#   inventree-proxy   — caddy:alpine proxy (sixnet + backend)
+#
+# Traffic flow:
+#   sixnet Caddy (TLS) → inventree-proxy:1337 → inventree-server:8000
+#                                             ↘ static/media files (shared volume)
+
+networks:
+  sixnet:
+    external: true
+    name: ${DOCKER_NETWORK_NAME:-sixnet}
+  backend:
+    internal: true
+
+volumes:
+  inventree-data:
+  inventree-db-data:
+  inventree-cache-data:
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Database
+  # ---------------------------------------------------------------------------
+  inventree-db:
+    image: postgres:15
+    container_name: inventree-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: inventree
+      POSTGRES_USER: inventree
+      POSTGRES_PASSWORD: ${INVENTREE_DB_PASSWORD}
+    volumes:
+      - inventree-db-data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "inventree"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Cache (Redis)
+  # ---------------------------------------------------------------------------
+  inventree-cache:
+    image: redis:7-alpine
+    container_name: inventree-cache
+    restart: unless-stopped
+    volumes:
+      - inventree-cache-data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Web server (gunicorn)
+  # INVENTREE_AUTO_UPDATE=true causes init.sh to run migrations before starting.
+  # ---------------------------------------------------------------------------
+  inventree-server:
+    image: inventree/inventree:stable
+    container_name: inventree-server
+    restart: unless-stopped
+    depends_on:
+      inventree-db:
+        condition: service_healthy
+      inventree-cache:
+        condition: service_healthy
+    env_file:
+      - ./secrets.env
+    environment:
+      # Database
+      INVENTREE_DB_ENGINE: django.db.backends.postgresql
+      INVENTREE_DB_NAME: inventree
+      INVENTREE_DB_USER: inventree
+      INVENTREE_DB_HOST: inventree-db
+      INVENTREE_DB_PORT: "5432"
+      # Cache
+      INVENTREE_CACHE_ENABLED: "true"
+      INVENTREE_CACHE_HOST: inventree-cache
+      INVENTREE_CACHE_PORT: "6379"
+      # Site
+      INVENTREE_SITE_URL: https://${APP_SUBDOMAIN:-inventory}.${DOMAIN}
+      INVENTREE_USE_X_FORWARDED_HOST: "true"
+      INVENTREE_USE_X_FORWARDED_PORT: "true"
+      INVENTREE_USE_X_FORWARDED_PROTO: "true"
+      # Run migrations + collectstatic on startup
+      INVENTREE_AUTO_UPDATE: "true"
+      # Initial admin (created on first run if set)
+      INVENTREE_ADMIN_EMAIL: ${INVENTREE_ADMIN_EMAIL}
+      INVENTREE_ADMIN_USER: ${INVENTREE_ADMIN_USER:-admin}
+      INVENTREE_ADMIN_PASSWORD: ${INVENTREE_ADMIN_PASSWORD}
+      # Allow new users to be created on first SSO login (required for OIDC).
+      # InvenTree dynamically forces LOGIN_ENABLE_SSO_REG=false at runtime when
+      # EMAIL_HOST is unset, regardless of the admin UI setting.
+      # Set a placeholder so the check passes — email delivery not needed for
+      # a VPN-internal SSO-only deployment (Authentik handles auth).
+      INVENTREE_LOGIN_ENABLE_SSO_REG: "true"
+      INVENTREE_EMAIL_HOST: ${SMTP_HOST:-localhost}
+      INVENTREE_EMAIL_SENDER: ${SMTP_FROM:-noreply@localhost}
+      # OIDC SSO via django-allauth
+      INVENTREE_SOCIAL_BACKENDS: allauth.socialaccount.providers.openid_connect
+      # provider_id "authentik" matches the segment in the callback URL:
+      #   /accounts/authentik/login/callback/  (allauth 65.x — no /oidc/ segment)
+      # ${VAR} is substituted by Docker Compose from the .env file.
+      INVENTREE_SOCIAL_PROVIDERS: >-
+        {"openid_connect": {"APPS": [{"provider_id": "authentik",
+        "name": "Authentik",
+        "client_id": "${INVENTREE_AUTHENTIK_CLIENT_ID}",
+        "secret": "${INVENTREE_AUTHENTIK_CLIENT_SECRET}",
+        "settings": {"server_url": "https://${SUBDOMAIN_AUTH:-auth}.${DOMAIN}/application/o/inventree"}}]}}
+    volumes:
+      - ${INVENTREE_DATA:-inventree-data}:/home/inventree/data
+    networks:
+      - sixnet
+      - backend
+
+  # ---------------------------------------------------------------------------
+  # Background worker (django-Q)
+  # ---------------------------------------------------------------------------
+  inventree-worker:
+    image: inventree/inventree:stable
+    container_name: inventree-worker
+    restart: unless-stopped
+    command: invoke worker
+    depends_on:
+      inventree-db:
+        condition: service_healthy
+      inventree-cache:
+        condition: service_healthy
+      inventree-server:
+        condition: service_started
+    env_file:
+      - ./secrets.env
+    environment:
+      INVENTREE_DB_ENGINE: django.db.backends.postgresql
+      INVENTREE_DB_NAME: inventree
+      INVENTREE_DB_USER: inventree
+      INVENTREE_DB_HOST: inventree-db
+      INVENTREE_DB_PORT: "5432"
+      INVENTREE_CACHE_ENABLED: "true"
+      INVENTREE_CACHE_HOST: inventree-cache
+      INVENTREE_CACHE_PORT: "6379"
+      INVENTREE_SITE_URL: https://${APP_SUBDOMAIN:-inventory}.${DOMAIN}
+    volumes:
+      - ${INVENTREE_DATA:-inventree-data}:/home/inventree/data
+    networks:
+      - sixnet
+      - backend
+
+  # ---------------------------------------------------------------------------
+  # Proxy (caddy:alpine — serves static/media files + proxies to gunicorn)
+  # ---------------------------------------------------------------------------
+  # Our outer Caddy (sixnet) proxies to this container on port 1337.
+  inventree-proxy:
+    image: caddy:alpine
+    container_name: inventree-proxy
+    restart: unless-stopped
+    depends_on:
+      - inventree-server
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${INVENTREE_DATA:-inventree-data}:/home/inventree/data:ro
+    networks:
+      - sixnet
+      - backend
+    # No port publishing — outer Caddy reaches via container name on sixnet

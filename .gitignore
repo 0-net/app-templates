@@ -1,0 +1,14 @@
+# Secrets and generated env files
+*.env
+.env*
+!*.env.example
+
+# macOS
+.DS_Store
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/

@@ -1,0 +1,44 @@
+# Jellyfin Media Server
+# https://jellyfin.org/docs/
+
+networks:
+  sixnet:
+    external: true
+    name: ${DOCKER_NETWORK_NAME:-sixnet}
+
+volumes:
+  jellyfin-config:
+  jellyfin-cache:
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:${JELLYFIN_TAG:-latest}
+    container_name: jellyfin
+    restart: unless-stopped
+    networks:
+      - sixnet
+    # No port publishing - Caddy handles external access via sixnet
+    environment:
+      - JELLYFIN_PublishedServerUrl=https://${APP_SUBDOMAIN:-media}.${DOMAIN}
+    volumes:
+      # Configuration and cache
+      - ${JELLYFIN_CONFIG:-jellyfin-config}:/config
+      - ${JELLYFIN_CACHE:-jellyfin-cache}:/cache
+      # Media libraries (configure in secrets.env)
+      # Multiple paths supported - add as many as needed
+      - ${MEDIA_PATH_1:-/dev/null}:/media/library1:ro
+      - ${MEDIA_PATH_2:-/dev/null}:/media/library2:ro
+      - ${MEDIA_PATH_3:-/dev/null}:/media/library3:ro
+    # Hardware acceleration (optional - uncomment for Intel QuickSync)
+    # devices:
+    #   - /dev/dri:/dev/dri
+    # group_add:
+    #   - "109"  # render group - adjust for your system
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    env_file:
+      - ./secrets.env

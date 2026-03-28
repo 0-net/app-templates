@@ -1,0 +1,56 @@
+# Beszel — Lightweight server monitoring hub + QNAP agent
+# https://beszel.dev/
+#
+# Architecture:
+#   beszel       — monitoring hub (PocketBase + web UI)
+#   beszel-agent — agent running on the QNAP host (network_mode: host)
+#                  connects back to hub on port 45876
+#
+# Traffic flow:
+#   sixnet Caddy (TLS) → beszel:8090
+#   beszel hub → 172.18.0.1:45876 → beszel-agent (host network)
+
+networks:
+  sixnet:
+    external: true
+    name: ${DOCKER_NETWORK_NAME:-sixnet}
+
+volumes:
+  beszel-data:
+
+services:
+
+  beszel:
+    image: henrygd/beszel
+    container_name: beszel
+    restart: unless-stopped
+    volumes:
+      - ${BESZEL_DATA:-beszel-data}:/beszel_data
+    environment:
+      # Allow SSO users to auto-create accounts on first login.
+      # Required for OIDC — Beszel has no pre-provisioning.
+      USER_CREATION: "true"
+      # Set to true once SSO is confirmed working to force SSO-only login.
+      DISABLE_PASSWORD_AUTH: "${BESZEL_DISABLE_PASSWORD_AUTH:-false}"
+    networks:
+      - sixnet
+    healthcheck:
+      test: ["CMD", "/beszel", "health", "--url", "http://localhost:8090"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    # No port publishing — outer Caddy reaches via container name on sixnet
+
+  beszel-agent:
+    image: henrygd/beszel-agent
+    container_name: beszel-agent
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      PORT: "45876"
+      KEY: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIANqyRFb9GWj5IexLIkJ6kl5AMfnm/d3H6NOSKi8d2Bf"
+      EXTRA_FILESYSTEMS: "${BESZEL_SMART_DRIVES:-}"

@@ -1,0 +1,22 @@
+# Twenty — Caddy Configuration Snippet
+# Include in main Caddyfile for deployment
+#
+# PUBLIC SERVICE:
+#   - HTTP-01 TLS managed by outer Caddy (no DNS-01 needed)
+#   - No IP filtering — accessible from the internet
+#   - Proxies to twenty-server:3000
+
+{{ .Env.APP_SUBDOMAIN }}.{{ .Env.DOMAIN }} {
+	reverse_proxy twenty-server:3000 {
+		header_up X-Forwarded-Proto https
+		header_up Host {host}
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	encode gzip
+
+	log {
+		output file /var/log/caddy/twenty.log
+		format json
+	}
+}

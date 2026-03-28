@@ -1,0 +1,85 @@
+# Authentik Blueprint: OAuth2 Provider for Beszel
+# Generated from template — do not edit the rendered file directly.
+#
+# Templating:
+#   .Env.VAR syntax  — substituted at build time by gomplate (build-config)
+#   !Env VAR         — resolved at Authentik startup from container environment
+#                      (credentials arrive via env_file: ./authentik/secrets.env)
+#
+# Beszel uses PocketBase as its embedded auth backend.
+# The redirect URI is PocketBase's standard OAuth2 callback: /api/oauth2-redirect
+# issuer_mode: per_provider ensures the issuer matches the app-specific
+# discovery URL that PocketBase expects.
+#
+# NOTE: This blueprint creates a custom email scope mapping (beszel-email-verified)
+# that hardcodes email_verified: True. This is required because:
+#   - Authentik 2025.10+ changed the built-in email mapping to return the user's
+#     actual email_verified attribute (was previously hardcoded True)
+#   - Users created via the Authentik admin UI are not email-verified by default
+#   - PocketBase v0.36.x silently drops the email field when email_verified is false
+#     resulting in a blank email, failed user creation, and a white screen after SSO
+
+version: 1
+metadata:
+  name: Beszel OAuth2 Provider
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+
+entries:
+  # Custom email scope mapping — hardcodes email_verified: True
+  # Replaces the built-in email mapping which returns the user's actual
+  # email_verified attribute starting in Authentik 2025.10.
+  - identifiers:
+      name: beszel-email-verified
+    id: beszel-email-scope
+    model: authentik_providers_oauth2.scopemapping
+    attrs:
+      name: beszel-email-verified
+      scope_name: email
+      description: "Beszel: email scope with email_verified hardcoded True (PocketBase workaround)"
+      expression: |
+        return {
+            "email": request.user.email,
+            "email_verified": True
+        }
+
+  # OAuth2 Provider
+  - identifiers:
+      name: beszel-oauth2-provider
+    id: beszel-provider
+    model: authentik_providers_oauth2.oauth2provider
+    attrs:
+      name: beszel-oauth2-provider
+      client_id: !Env BESZEL_AUTHENTIK_CLIENT_ID
+      client_secret: !Env BESZEL_AUTHENTIK_CLIENT_SECRET
+      client_type: confidential
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      redirect_uris:
+        - url: "{{ .Env.APP_SSO_REDIRECT_URI }}"
+          matching_mode: strict
+      access_code_validity: minutes=1
+      access_token_validity: minutes=5
+      refresh_token_validity: days=30
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, "authentik Self-signed Certificate"]]
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+        - !KeyOf beszel-email-scope
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+      sub_mode: hashed_user_id
+      include_claims_in_id_token: true
+      issuer_mode: per_provider
+
+  # Application
+  - identifiers:
+      slug: beszel
+    id: beszel-app
+    model: authentik_core.application
+    attrs:
+      name: Beszel
+      slug: beszel
+      provider: !KeyOf beszel-provider
+      meta_launch_url: "https://{{ .Env.APP_SUBDOMAIN }}.{{ .Env.DOMAIN }}/"
+      meta_description: Server monitoring
+      policy_engine_mode: any
+      open_in_new_tab: false

@@ -1,0 +1,21 @@
+# v.dash — Caddy Configuration Snippet
+# Include in main Caddyfile for deployment
+#
+# PUBLIC SERVICE:
+#   - HTTP-01 TLS managed by outer Caddy (no DNS-01 needed)
+#   - No IP filtering — accessible from the internet
+#   - Proxies to v.dash container running outside sixnet Docker network
+
+{{ .Env.APP_SUBDOMAIN }}.{{ .Env.DOMAIN }} {
+	reverse_proxy 10.147.20.169:8471 {
+		header_up X-Forwarded-Proto https
+		header_up Host {host}
+	}
+
+	encode gzip
+
+	log {
+		output file /var/log/caddy/dash.log
+		format json
+	}
+}
