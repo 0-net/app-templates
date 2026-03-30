@@ -41,6 +41,7 @@ Each app directory contains:
 |---|---|---|---|
 | `beszel` | VPN-only | Authentik OIDC | Server monitoring via PocketBase |
 | `docmost` | Public | — | Collaborative wiki (OIDC SSO is enterprise-only) |
+| `fizzy` | Public | — | Kanban issue tracker, passwordless (no SSO possible) |
 | `dash` | VPN-only | — | Simple status dashboard |
 | `inventree` | VPN-only | Authentik OIDC | Inventory management |
 | `jellyfin` | VPN-only | Authentik OIDC | Media server |

@@ -1,0 +1,28 @@
+services:
+  fizzy:
+    image: ghcr.io/basecamp/fizzy:main
+    container_name: fizzy
+    restart: unless-stopped
+    networks:
+      - sixnet
+    volumes:
+      - ${FIZZY_DATA:-fizzy-data}:/rails/storage
+    environment:
+      BASE_URL: "https://${APP_SUBDOMAIN}.${DOMAIN}"
+      SECRET_KEY_BASE: "${FIZZY_SECRET_KEY_BASE}"
+      DISABLE_SSL: "true"
+
+      SMTP_ADDRESS: "${FIZZY_SMTP_ADDRESS:-}"
+      SMTP_PORT: "${FIZZY_SMTP_PORT:-587}"
+      SMTP_USERNAME: "${FIZZY_SMTP_USERNAME:-}"
+      SMTP_PASSWORD: "${FIZZY_SMTP_PASSWORD:-}"
+      SMTP_DOMAIN: "${FIZZY_SMTP_DOMAIN:-}"
+      SMTP_AUTHENTICATION: "${FIZZY_SMTP_AUTHENTICATION:-plain}"
+      MAILER_FROM_ADDRESS: "${FIZZY_MAILER_FROM:-}"
+
+networks:
+  sixnet:
+    external: true
+
+volumes:
+  fizzy-data:
