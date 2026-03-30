@@ -40,6 +40,7 @@ Each app directory contains:
 | App | Access | SSO | Notes |
 |---|---|---|---|
 | `beszel` | VPN-only | Authentik OIDC | Server monitoring via PocketBase |
+| `docmost` | Public | — | Collaborative wiki (OIDC SSO is enterprise-only) |
 | `dash` | VPN-only | — | Simple status dashboard |
 | `inventree` | VPN-only | Authentik OIDC | Inventory management |
 | `jellyfin` | VPN-only | Authentik OIDC | Media server |

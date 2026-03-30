@@ -1,0 +1,65 @@
+services:
+  docmost:
+    image: docmost/docmost:latest
+    container_name: docmost
+    restart: unless-stopped
+    depends_on:
+      docmost-db:
+        condition: service_healthy
+      docmost-redis:
+        condition: service_started
+    networks:
+      - sixnet
+      - docmost-net
+    volumes:
+      - ${DOCMOST_DATA:-docmost-data}:/app/data/storage
+    environment:
+      APP_URL: "https://${APP_SUBDOMAIN}.${DOMAIN}"
+      APP_SECRET: "${DOCMOST_APP_SECRET}"
+      DATABASE_URL: "postgresql://docmost:${DOCMOST_DB_PASSWORD}@docmost-db:5432/docmost"
+      REDIS_URL: "redis://docmost-redis:6379"
+
+      MAIL_DRIVER: "${DOCMOST_MAIL_DRIVER:-smtp}"
+      SMTP_HOST: "${DOCMOST_SMTP_HOST:-}"
+      SMTP_PORT: "${DOCMOST_SMTP_PORT:-587}"
+      SMTP_USERNAME: "${DOCMOST_SMTP_USERNAME:-}"
+      SMTP_PASSWORD: "${DOCMOST_SMTP_PASSWORD:-}"
+      MAIL_FROM_ADDRESS: "${DOCMOST_MAIL_FROM:-}"
+      MAIL_FROM_NAME: "${DOCMOST_MAIL_FROM_NAME:-Docmost}"
+
+  docmost-db:
+    image: postgres:18
+    container_name: docmost-db
+    restart: unless-stopped
+    networks:
+      - docmost-net
+    volumes:
+      - ${DOCMOST_DB_DATA:-docmost-db-data}:/var/lib/postgresql
+    environment:
+      POSTGRES_DB: docmost
+      POSTGRES_USER: docmost
+      POSTGRES_PASSWORD: "${DOCMOST_DB_PASSWORD}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docmost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  docmost-redis:
+    image: redis:8
+    container_name: docmost-redis
+    restart: unless-stopped
+    networks:
+      - docmost-net
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+
+networks:
+  sixnet:
+    external: true
+  docmost-net:
+    internal: true
+
+volumes:
+  docmost-data:
+  docmost-db-data:

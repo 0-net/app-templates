@@ -1,0 +1,23 @@
+# Docmost — Caddy Configuration Snippet
+# Include in main Caddyfile for deployment
+#
+# PUBLIC SERVICE:
+#   - HTTP-01 TLS managed by Caddy (via FRP or direct port forwarding)
+#   - No IP filtering — accessible from the internet
+#   - WebSocket support required for the collaborative editor (Caddy handles automatically)
+#   - Proxies to docmost:3000
+
+{{ .Env.APP_SUBDOMAIN }}.{{ .Env.DOMAIN }} {
+	reverse_proxy docmost:3000 {
+		header_up X-Forwarded-Proto https
+		header_up Host {host}
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	encode gzip
+
+	log {
+		output file /var/log/caddy/docmost.log
+		format json
+	}
+}
