@@ -1,0 +1,45 @@
+services:
+  umami:
+    image: ghcr.io/umami-software/umami:latest
+    container_name: umami
+    restart: unless-stopped
+    depends_on:
+      umami-db:
+        condition: service_healthy
+    networks:
+      - sixnet
+      - umami-net
+    environment:
+      DATABASE_URL: "postgresql://umami:${UMAMI_DB_PASSWORD}@umami-db:5432/umami"
+      APP_SECRET: "${UMAMI_APP_SECRET}"
+      DISABLE_TELEMETRY: "1"
+      TRACKER_SCRIPT_NAME: "${UMAMI_TRACKER_SCRIPT_NAME:-script.js}"
+      COLLECT_API_ENDPOINT: "${UMAMI_COLLECT_API_ENDPOINT:-/api/send}"
+
+  umami-db:
+    image: postgres:15-alpine
+    container_name: umami-db
+    restart: unless-stopped
+    networks:
+      - umami-net
+    volumes:
+      - ${UMAMI_DB_DATA:-umami-db-data}:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: "${UMAMI_DB_PASSWORD}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U umami"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+networks:
+  sixnet:
+    external: true
+  umami-net:
+    internal: true
+
+volumes:
+  umami-db-data:
