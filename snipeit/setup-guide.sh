@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# Source deployment env if invoked via make app-setup
+[ -n "${ENV_FILE:-}" ] && [ -f "$ENV_FILE" ] && set -a && source "$ENV_FILE" && set +a
+
 DOMAIN="${DOMAIN:-}"
 APP_SUBDOMAIN="${APP_SUBDOMAIN:-assets}"
 SNIPEIT_URL="https://${APP_SUBDOMAIN}.${DOMAIN}"
