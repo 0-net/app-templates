@@ -1,0 +1,59 @@
+# Authentik Blueprint: OAuth2 Provider for Stirling-PDF
+# Generated from template — do not edit the rendered file directly.
+#
+# Templating:
+#   .Env.VAR syntax  — substituted at build time by gomplate (build-config)
+#   !Env VAR         — resolved at Authentik startup from container environment
+#                      (credentials arrive via env_file: ./authentik/secrets.env)
+#
+# Stirling-PDF uses Spring Security OAuth2 (standard authorization code flow).
+# The redirect URI is: https://pdf.<domain>/login/oauth2/code/authentik
+# SECURITY_OAUTH2_PROVIDER=authentik triggers Stirling-PDF's Authentik preset.
+
+version: 1
+metadata:
+  name: Stirling-PDF OAuth2 Provider
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+
+entries:
+  # OAuth2 Provider
+  - identifiers:
+      name: stirlingpdf-oauth2-provider
+    id: stirlingpdf-provider
+    model: authentik_providers_oauth2.oauth2provider
+    attrs:
+      name: stirlingpdf-oauth2-provider
+      client_id: !Env STIRLINGPDF_AUTHENTIK_CLIENT_ID
+      client_secret: !Env STIRLINGPDF_AUTHENTIK_CLIENT_SECRET
+      client_type: confidential
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      redirect_uris:
+        - url: "{{ .Env.APP_SSO_REDIRECT_URI }}"
+          matching_mode: strict
+      access_code_validity: minutes=1
+      access_token_validity: minutes=5
+      refresh_token_validity: days=30
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, "authentik Self-signed Certificate"]]
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+      sub_mode: hashed_user_id
+      include_claims_in_id_token: true
+      issuer_mode: per_provider
+
+  # Application
+  - identifiers:
+      slug: stirling-pdf
+    id: stirlingpdf-app
+    model: authentik_core.application
+    attrs:
+      name: Stirling-PDF
+      slug: stirling-pdf
+      provider: !KeyOf stirlingpdf-provider
+      meta_launch_url: "https://{{ .Env.APP_SUBDOMAIN }}.{{ .Env.DOMAIN }}/"
+      meta_description: PDF tools suite
+      policy_engine_mode: any
+      open_in_new_tab: false

@@ -1,0 +1,22 @@
+# Stirling-PDF — Caddy Configuration Snippet
+# Include in main Caddyfile for deployment
+#
+# PUBLIC SERVICE:
+#   - HTTP-01 TLS managed by Caddy
+#   - No IP filtering — accessible from the internet
+#   - Proxies to stirlingpdf:8080
+
+{{ .Env.APP_SUBDOMAIN }}.{{ .Env.DOMAIN }} {
+	reverse_proxy stirlingpdf:8080 {
+		header_up X-Forwarded-Proto https
+		header_up Host {host}
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	encode gzip
+
+	log {
+		output file /var/log/caddy/stirlingpdf.log
+		format json
+	}
+}
