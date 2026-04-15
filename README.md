@@ -52,18 +52,26 @@ Each app directory contains:
 | `twenty` | Public | — | CRM (generic OIDC SSO is enterprise-only) |
 | `umami` | Public | — | Privacy-focused web analytics (no SSO in open-source) |
 
-## Adding an app to a deployment
+## Deploying a template
+
+Adding an app to an existing deployment is a core-stack concern — see the
+[deploy guide](https://github.com/0-net/core-stack/blob/main/docs/development/deploying-apps.md).
+The short form:
 
 ```bash
 # 1. Add the app name to APPS= in your deployment.env
-# 2. Initialise — scaffolds secrets and deployment config
-make -f core/Makefile init-app APP=<name> DEPLOYMENT=.deployments/<name>/deployment.env
-
-# 3. Deploy
+# 2. Scaffold and deploy
+make -f core/Makefile init-app   APP=<name> DEPLOYMENT=.deployments/<name>/deployment.env
 make -f core/Makefile deploy-app APP=<name> DEPLOYMENT=.deployments/<name>/deployment.env
 ```
 
-## App contract
+## Creating a new template
+
+See [AUTHORING.md](./AUTHORING.md) for the full walkthrough — directory layout, required
+files, `app.conf` fields, caddy snippet syntax, SSO blueprints, examples, checklist, and
+troubleshooting.
+
+## App contract (quick reference)
 
 ### `app.conf` required fields
 
@@ -76,15 +84,14 @@ APP_SSO=true|false        # Whether to auto-generate Authentik OAuth2 credential
 
 ### Access modes
 
-- **`vpn`** — TLS via Route 53 DNS-01 challenge, IP-filtered to ZeroTier subnet. App is
-  reachable only from inside the VPN.
-- **`public`** — TLS via HTTP-01 challenge (requires port 80 reachable). No IP filtering.
+- **`vpn`** — TLS via Route 53 DNS-01 challenge, IP-filtered to the ZeroTier subnet.
+- **`public`** — TLS via HTTP-01 challenge (needs port 80 reachable). No IP filtering.
 
 ### Networks
 
-Apps connect to the `0-net` (`sixnet`) Docker network (external, created by the core stack) so
-Caddy can reach them by container name. Internal app networks (db, redis, etc.) are
-defined per-app and are the app's own concern.
+Apps connect to the `0-net` (`sixnet`) Docker network (external, created by the core stack)
+so Caddy can reach them by container name. Internal app networks (db, redis, etc.) are the
+app's own concern.
 
 ### SSO
 
@@ -95,11 +102,10 @@ the app's `secrets.env` and Authentik's `secrets.env`.
 ## Relation to 0-net (six.net) core
 
 The core stack references this repo via `APPS_DIR` (default: `../app-templates` relative
-to `core/Makefile`). Clone this repo next to `0-net/core-stack` or symlink it at
-`0-net/core-stack/app-templates/`.
+to `core/Makefile`). Clone this repo next to `0-net/core-stack`, or symlink it:
 
 ```
 ~/projects/0-net/app-templates/     # this repo
 ~/projects/0-net/core-stack/        # core stack
-~/projects/0-net/core-stack/app-templates -> ../app-templates  # symlink
+~/projects/0-net/core-stack/app-templates -> ../app-templates  # optional symlink
 ```
