@@ -1,0 +1,47 @@
+services:
+  stirlingpdf:
+    image: stirlingtools/stirling-pdf:latest
+    container_name: stirlingpdf
+    restart: unless-stopped
+    networks:
+      - sixnet
+    volumes:
+      - ${STIRLINGPDF_CONFIGS:-stirlingpdf-configs}:/configs
+      - ${STIRLINGPDF_LOGS:-stirlingpdf-logs}:/logs
+    environment:
+      DOCKER_ENABLE_SECURITY: "true"
+      SECURITY_ENABLELOGIN: "true"
+      SECURITY_INITIALLOGIN_USERNAME: "${STIRLINGPDF_ADMIN_USERNAME:-admin}"
+      SECURITY_INITIALLOGIN_PASSWORD: "${STIRLINGPDF_ADMIN_PASSWORD}"
+      SECURITY_LOGINMETHOD: "${STIRLINGPDF_LOGIN_METHOD:-all}"
+
+      SYSTEM_BACKENDURL: "https://${APP_SUBDOMAIN}.${DOMAIN}"
+      SYSTEM_GOOGLEVISIBILITY: "false"
+      SYSTEM_ENABLEANALYTICS: "false"
+
+      SECURITY_OAUTH2_ENABLED: "true"
+      SECURITY_OAUTH2_PROVIDER: "authentik"
+      SECURITY_OAUTH2_ISSUER: "https://${SUBDOMAIN_AUTH}.${DOMAIN}/application/o/stirling-pdf/"
+      SECURITY_OAUTH2_CLIENTID: "${STIRLINGPDF_AUTHENTIK_CLIENT_ID}"
+      SECURITY_OAUTH2_CLIENTSECRET: "${STIRLINGPDF_AUTHENTIK_CLIENT_SECRET}"
+      SECURITY_OAUTH2_SCOPES: "openid, profile, email"
+      SECURITY_OAUTH2_USEASUSERNAME: "preferred_username"
+      SECURITY_OAUTH2_AUTOCREATEUSER: "true"
+
+      # Email / SMTP — set STIRLINGPDF_SMTP_HOST (and other vars) to enable
+      MAIL_ENABLED: "${STIRLINGPDF_MAIL_ENABLED:-false}"
+      MAIL_HOST: "${STIRLINGPDF_SMTP_HOST:-}"
+      MAIL_PORT: "${STIRLINGPDF_SMTP_PORT:-587}"
+      MAIL_USERNAME: "${STIRLINGPDF_SMTP_USERNAME:-}"
+      MAIL_PASSWORD: "${STIRLINGPDF_SMTP_PASSWORD:-}"
+      MAIL_FROM: "${STIRLINGPDF_SMTP_FROM:-}"
+      MAIL_TLS_ENABLED: "${STIRLINGPDF_SMTP_TLS:-true}"
+      MAIL_ENABLEINVITES: "${STIRLINGPDF_MAIL_ENABLEINVITES:-true}"
+
+networks:
+  sixnet:
+    external: true
+
+volumes:
+  stirlingpdf-configs:
+  stirlingpdf-logs:

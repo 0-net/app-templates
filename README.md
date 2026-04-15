@@ -48,6 +48,7 @@ Each app directory contains:
 | `openproject` | VPN-only | — | Project management |
 | `plane` | Public | — | Project management (SSO is commercial) |
 | `snipeit` | VPN-only | — | IT asset management (SAML SSO requires LDAP outpost) |
+| `stirlingpdf` | Public | Authentik OIDC | PDF tools suite |
 | `twenty` | Public | — | CRM (generic OIDC SSO is enterprise-only) |
 | `umami` | Public | — | Privacy-focused web analytics (no SSO in open-source) |
 
